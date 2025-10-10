@@ -314,9 +314,9 @@ def init_worker(d_value):
 
 if __name__ == "__main__":
     start_time = time.time()
-    for d in range(2, 7):
+    for d in range(2, 13):
         R = CyclotomicField(d)
         zeta = R.gen()
         rows_orthogonal_cached.cache_clear() # Avoid conflicts that may arise due to using the same tuples with different zeta values
-        for n in range(2, 8):
+        for n in range(2, 12):
             run_parallel(n, d)
