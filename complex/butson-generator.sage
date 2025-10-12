@@ -226,7 +226,7 @@ def run_parallel(n, d):
     t3 = time.time()
     print(f"Permutation-core CHMs ({n}, {d}): {t3 - t2:.3f} seconds")
     # Write results
-    write_chms_to_file(permutation_chms, f"Permutation-core H({int(n)}, {int(d)}).txt")
+    write_chms_to_file(permutation_chms, f"permutation-{int(n)}-{int(d)}.txt")
 
     # --- Parallel Butson CHMs ---
     safe_vector_list = [tuple(row) for row in vector_list]  # tuples are pickle-safe
@@ -241,7 +241,7 @@ def run_parallel(n, d):
     t5 = time.time()
     print(f"Butson-type CHMs ({n}, {d}): {t5 - t4:.3f} seconds")
     # write to file
-    write_chms_to_file(butson_chms, f"Butson-type H({int(n)}, {int(d)}).txt")
+    write_chms_to_file(butson_chms, f"butson-{int(n)}-{int(d)}.txt")
 
     print(f"Total runtime ({n}, {d}): {t5 - t0: .3f} seconds")
 
