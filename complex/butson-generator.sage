@@ -181,6 +181,16 @@ def process_chunk(chunk, n, d):
         results.extend(build_permutation_core_CHMs(row, int(n), int(d)))
     return results
 
+def process_circulant_core(chunk, n, d):
+    """
+    Compute permutation-core CHMs for a chunk of rows.
+    Returns a list of matrices.
+    """
+    results = []
+    for row in chunk:
+        results.append(build_circulant_core_CHMs(row, int(n), int(d)))
+    return results
+
 # --- Top-level function for Butson CHMs ---
 def process_butson(_unused, vector_list, n, d):
     """
@@ -226,7 +236,7 @@ def run_parallel(n, d):
     t3 = time.time()
     print(f"Permutation-core CHMs ({n}, {d}): {t3 - t2:.3f} seconds")
     # Write results
-    write_chms_to_file(permutation_chms, f"permutation-{int(n)}-{int(d)}.txt")
+    write_chms_to_file(permutation_chms, f"permutation/permutation-{int(n)}-{int(d)}.txt")
 
     # --- Parallel Butson CHMs ---
     safe_vector_list = [tuple(row) for row in vector_list]  # tuples are pickle-safe
@@ -241,7 +251,7 @@ def run_parallel(n, d):
     t5 = time.time()
     print(f"Butson-type CHMs ({n}, {d}): {t5 - t4:.3f} seconds")
     # write to file
-    write_chms_to_file(butson_chms, f"butson-{int(n)}-{int(d)}.txt")
+    write_chms_to_file(butson_chms, f"butson/butson-{int(n)}-{int(d)}.txt")
 
     print(f"Total runtime ({n}, {d}): {t5 - t0: .3f} seconds")
 
@@ -307,6 +317,66 @@ def process_butson(start_rows_chunk, full_vector_list, n, d):
         results.extend(build_Butson_CHMs(full_vector_list, n, d, start_row))
     return results
 
+
+def build_circulant_core_CHMs(core_coeffs, n, d):
+	"""
+	core_coeffs: list of integers
+	n: size of the CHM
+	d: dth root of unity, i.e. e^{2pi i/d}
+	Returns: list of matrices (each matrix is a list of rows, each row is a list)
+	"""
+	first_row = [0]*n
+	fixed_first = core_coeffs[0]
+	tail = core_coeffs[1:]
+	matrix = [first_row, core_coeffs]
+	for i in range(1, n-1):
+		if not rows_orthogonal_cached(tuple([fixed_first] + tail[-i:] + tail[:-i]), tuple([fixed_first] + tail)):
+			return []
+		matrix.append([fixed_first] + tail[-i:] + tail[:-i])
+	return matrix
+
+# --- Main parallel runner ---
+def circulant_core_parallel(n, d):
+	# Ensure inputs are Sage Integers
+	n = Integer(n)
+	d = Integer(d)
+	t0 = time.time()
+
+	# Generate the L1 vectors (single-threaded)
+	
+	vector_list = generate_L1_vectors(n, d)
+
+	# Convert all numbers to plain Python ints to reduce pickling overhead
+	vector_list = [[int(x) for x in row] for row in vector_list]
+	
+	vector_list.sort() # Minimize canonical checks
+
+	t1 = time.time()
+	print(f"L1 vector generation ({n}, {d}): {t1 - t0:.3f} seconds")
+
+	# Determine chunk size: more tasks than cores
+	cpu_count = mp.cpu_count()
+	chunk_size = max(1, len(vector_list) // (cpu_count * 4))  # ~4 tasks per core
+	chunks = list(chunk_list(vector_list, chunk_size))
+
+	# Use spawn context for WSL/Linux
+	ctx = mp.get_context('spawn')
+	t2 = time.time()
+
+	# --- Parallel permutation-core CHMs ---
+	circulant_core_chms = []
+	with ctx.Pool(cpu_count, initializer=init_worker, initargs=(d,)) as pool:
+		for res in pool.starmap(process_circulant_core, [(chunk, n, d) for chunk in chunks]):
+			if res:
+				circulant_core_chms.extend(res)
+
+	t3 = time.time()
+	print(f"Circulant-core CHMs ({n}, {d}): {t3 - t2:.3f} seconds")
+	# Write results
+	write_chms_to_file(circulant_core_chms, f"circulant-core/circulant-core-{int(n)}-{int(d)}.txt")
+	print(f"Total runtime ({n}, {d}): {t3 - t0: .3f} seconds")
+
+
 def init_worker(d_value):
     global zeta
     from sage.all import CyclotomicField
@@ -314,9 +384,9 @@ def init_worker(d_value):
 
 if __name__ == "__main__":
     start_time = time.time()
-    for d in range(2, 13):
+    for d in range(2, 25):
         R = CyclotomicField(d)
         zeta = R.gen()
         rows_orthogonal_cached.cache_clear() # Avoid conflicts that may arise due to using the same tuples with different zeta values
-        for n in range(2, 12):
-            run_parallel(n, d)
+        for n in range(2, 25):
+            circulant_core_parallel(n, d)
